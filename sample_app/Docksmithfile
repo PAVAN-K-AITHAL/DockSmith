@@ -1,0 +1,6 @@
+FROM alpine:latest
+ENV GREETING=Hello from the customized env
+WORKDIR /app
+COPY . /app
+RUN chmod +x main.sh && echo "Ready!" > myapp.txt
+CMD ["./main.sh"]

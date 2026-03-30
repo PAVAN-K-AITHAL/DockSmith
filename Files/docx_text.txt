@@ -1,0 +1,66 @@
+This sounds like an intense but incredibly rewarding engineering challenge. You are essentially stripping away the magic of containerization and building the core mechanics from the ground up.
+Here is a breakdown of the project’s objectives, expectations, a division of labor for your 4-member team, and a step-by-step workflow to get it done.
+Project Objective
+The primary goal is to build Docksmith, a simplified, from-scratch version of a Docker-like build and runtime system. By completing this, your team will deeply understand three core concepts:
+How build caching and content-addressing work.
+How the operating system actually handles process isolation.
+How container images are assembled layer-by-layer and executed.
+What is Expected
+Your final deliverable must meet several strict, core requirements:
+Architecture: A single CLI binary (docksmith) with no background daemon, where all state is stored directly on disk in ~/.docksmith/ (categorized into images, layers, and cache) .
+Build Language: You must parse a Docksmithfile and implement exactly six instructions: FROM, COPY, RUN, WORKDIR, ENV, and CMD.
+Offline Operation: After an initial setup to download base images into your local store, the entire tool must operate completely offline with zero network access.
+Deterministic Caching: The cache must be perfectly reproducible. It computes a cache key based on the previous layer's digest, instruction text, environment state, working directory, and the hash of copied files . Any cache miss must cascade and invalidate all subsequent steps.
+Strict Process Isolation: This is a hard pass/fail criterion. You must implement a Linux-native OS isolation primitive. A process running inside the container (whether via docksmith run or a RUN command during the build) absolutely cannot read or write to the host filesystem outside its assembled root.
+Demonstrable Sample App: You need to provide a sample app that utilizes all six instructions and proves the caching, isolation, and offline capabilities during a live demo .
+
+Team Work Breakdown (4 Members)
+Since this project has very distinct architectural boundaries, dividing the work by core subsystems is the most efficient approach.
+Member 1: The CLI & State Manager
+Focus: The user-facing binary and filesystem state.
+Responsibilities:
+Scaffold the main CLI structure to handle the required commands: build, images, rmi, and run.
+Manage the ~/.docksmith/ directory creation and structure.
+Implement the images list command and the rmi (remove image) logic, ensuring it cleans up the manifest and layer files.
+Member 2: The Build Engine & Manifest Architect
+Focus: Parsing the Docksmithfile and assembling the JSON manifests.
+Responsibilities:
+Write the parser for the six required instructions (FROM, COPY, RUN, WORKDIR, ENV, CMD).
+Generate the final image manifest JSON, ensuring the digest is computed correctly using the canonical form (empty digest field before hashing) .
+Handle WORKDIR and ENV states, injecting them into the image config without producing tar layers.
+Member 3: The Cache & Content-Addressing Engineer
+Focus: Reproducibility and speed.
+Responsibilities:
+Implement the complex cache key generation logic (hashing previous digests, instruction text, sorted ENV states, and source file bytes) .
+Handle the cache Hit/Miss/Cascade logic, printing the exact required outputs ([CACHE HIT], [CACHE MISS]).
+Ensure builds are byte-for-byte reproducible by enforcing sorted tar entries and zeroed timestamps.
+Member 4: The OS Runtime & Isolation Specialist
+Focus: The Linux process isolation and filesystem assembly. Testing this Linux-native isolation primitive directly on an Ubuntu environment will make debugging much smoother, avoiding WSL quirks when possible.
+Responsibilities:
+Build the core isolation mechanism using OS primitives (e.g., chroot, unshare) to ensure no host access.
+Extract layer tarballs in the correct order into a temporary directory to create the root filesystem.
+Ensure this exact same isolation primitive is utilized by both docksmith run and the RUN build instruction.
+
+Workflow for Project Completion
+Phase 1: Foundation & Setup (Week 1)
+Define the data structures for the CLI and internal state.
+Ensure all team members have a functional Linux VM setup.
+Download and manually import a minimal base image (like Alpine) to the ~/.docksmith/ directory to satisfy the offline constraint .
+Phase 2: Parsing & Basic Build Execution (Week 2)
+Implement the Docksmithfile parser.
+Get the FROM instruction working (recognizing the base image).
+Implement ENV, WORKDIR, and CMD logic in memory (updating the active state).
+Phase 3: The Isolation Core (Week 3)
+This is the critical path. Member 4 focuses entirely on locking down a process into a temporary directory using OS primitives.
+Integrate this isolation primitive into the RUN command of the build engine.
+Implement docksmith run to extract base layers and execute a shell inside the isolated root.
+Phase 4: Deltas, Caching, and Storage (Week 4)
+Implement the COPY instruction.
+Write the logic to capture filesystem deltas (from COPY and RUN) and save them as immutable, content-addressed tar files .
+Implement the deterministic cache key hashing and the cascade invalidation logic .
+Phase 5: Integration, Sample App, and Polish (Week 5)
+Wire the CLI commands together.
+Develop the Sample App Docksmithfile ensuring it uses all six instructions and works entirely offline .
+Run through the 8 strict demo steps listed in the requirements, particularly the pass/fail test of writing a file inside the container and checking the host.
+Would you like to brainstorm specific Linux primitives (like chroot or namespaces) that Member 4 should look into for the isolation requirement?
+
