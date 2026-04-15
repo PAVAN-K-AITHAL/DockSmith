@@ -55,8 +55,8 @@ def snapshot_dir(path):
         for f in files:
             abs_p = os.path.join(root, f)
             rel_p = os.path.relpath(abs_p, path)
-            st = os.stat(abs_p)
-            snap[rel_p] = (st.st_mtime, st.st_size)
+            st = os.lstat(abs_p)
+            snap[rel_p] = (st.st_mtime, st.st_size, st.st_mode)
     return snap
 
 def build_image(tag, context_dir, no_cache=False):
@@ -66,6 +66,9 @@ def build_image(tag, context_dir, no_cache=False):
         
     with open(docksmith_file, "r") as df:
         instructions = [l.strip() for l in df.readlines() if l.strip() and not l.startswith("#")]
+        
+    existing_manifest = read_manifest(tag)
+    original_created = existing_manifest.get("created") if existing_manifest else None
         
     manifest = {
         "name": tag.split(":")[0],
@@ -141,7 +144,13 @@ def build_image(tag, context_dir, no_cache=False):
                 # Expand globs in context
                 matches = glob.glob(os.path.join(context_dir, src), recursive=True)
                 for m in matches:
-                    if os.path.isfile(m):
+                    if os.path.isdir(m):
+                        for root_dir, _, files in os.walk(m):
+                            for f in files:
+                                abs_f = os.path.join(root_dir, f)
+                                rel = os.path.relpath(abs_f, context_dir)
+                                copy_sources[rel] = abs_f
+                    elif os.path.isfile(m):
                         rel = os.path.relpath(m, context_dir)
                         copy_sources[rel] = m
             
@@ -173,7 +182,7 @@ def build_image(tag, context_dir, no_cache=False):
                     for rel, abs_path in copy_sources.items():
                         target = os.path.join(temp_dir, rel)
                         os.makedirs(os.path.dirname(target), exist_ok=True)
-                        shutil.copy2(abs_path, target)
+                        shutil.copy2(abs_path, target, follow_symlinks=False)
                         
                     tar_bytes = create_deterministic_tar(temp_dir, prefix=dest)
                     shutil.rmtree(temp_dir)
@@ -198,13 +207,13 @@ def build_image(tag, context_dir, no_cache=False):
                         for f in files:
                             abs_p = os.path.join(root, f)
                             rel_p = os.path.relpath(abs_p, temp_dir)
-                            st = os.stat(abs_p)
+                            st = os.lstat(abs_p)
 
-                            if rel_p not in snap_before or snap_before[rel_p] != (st.st_mtime, st.st_size):
+                            if rel_p not in snap_before or snap_before[rel_p] != (st.st_mtime, st.st_size, st.st_mode):
                                 # It's a new or modified file
                                 out_p = os.path.join(delta_dir, rel_p)
                                 os.makedirs(os.path.dirname(out_p), exist_ok=True)
-                                shutil.copy2(abs_p, out_p)
+                                shutil.copy2(abs_p, out_p, follow_symlinks=False)
                     
                     # Build tar from delta_dir
                     tar_bytes = create_deterministic_tar(delta_dir, prefix="/")
@@ -229,6 +238,9 @@ def build_image(tag, context_dir, no_cache=False):
         else:
             print(f"Error on line {step_num}: Unrecognised instruction '{cmd}'")
             return False
+
+    if not cascade_miss and original_created:
+        manifest["created"] = original_created
 
     write_manifest(tag, manifest)
     total_time = time.time() - start_time
