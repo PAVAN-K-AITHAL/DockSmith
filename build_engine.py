@@ -194,7 +194,7 @@ def build_image(tag, context_dir, no_cache=False):
                     # Snapshot before
                     snap_before = snapshot_dir(temp_dir)
                     
-                    shlex_cmd = ["sh", "-c", args] 
+                    shlex_cmd = ["/bin/sh", "-c", args] 
                     code = execute_isolated(temp_dir, shlex_cmd, current_workdir, current_env)
                     if code != 0:
                         print(f"Error on line {step_num}: command failed with exit code {code}")
